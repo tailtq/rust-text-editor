@@ -1,6 +1,5 @@
-use std::io::stdout;
-use crossterm::execute;
-use crossterm::terminal::{ClearType, disable_raw_mode, enable_raw_mode, Clear};
+mod terminal;
+use terminal::Terminal;
 use crossterm::event::{read, Event, Event::Key, KeyCode::Char, KeyEvent, KeyModifiers};
 
 
@@ -9,37 +8,30 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub fn default() -> Self {
-        Editor {
+    pub const fn default() -> Self {
+        Self {
             should_quit: false
         }
     }
 
     pub fn run(&mut self) {
-        Self::initialize().unwrap();
+        Terminal::initialize().unwrap();
         let repl = self.repl();
-        Self::terminate().unwrap();
+        Terminal::terminate().unwrap();
         repl.unwrap();
-    }
-    fn initialize() -> Result<(), std::io::Error> {
-        enable_raw_mode()?;
-        Self::clear_screen()
-    }
-    fn terminate() -> Result<(), std::io::Error> {
-        disable_raw_mode()
     }
     // The function will return nothing if everything went well, and returns an error if something we couldn't recover from happened.
     fn repl(&mut self) -> Result<(), std::io::Error> {
         // unwraps the Result of enable_raw_mode.
         // If it's an error, it returns the error immediately. If not, it continues.
         loop {
-            let event = read()?;
-            self.evaluate_event(&event);
             self.refresh_screen()?;
-
             if self.should_quit {
+                let _ = Self::draw_rows();
                 break;
             }
+            let event = read()?;
+            self.evaluate_event(&event);
         }
         Ok(())
     }
@@ -50,8 +42,7 @@ impl Editor {
         if let Key(KeyEvent {
             code, modifiers, ..
         }) = event {
-            print!("Code: {code},  modifiers: {modifiers}\r\n");
-
+            // print!("Code: {code},  modifiers: {modifiers}\r\n");
             // implicit dereference for code and dereference for modifiers
             match code {
                 Char('x') if *modifiers == KeyModifiers::CONTROL => {
@@ -61,15 +52,28 @@ impl Editor {
             }
         }
     }
-    fn clear_screen() -> Result<(), std::io::Error> {
-        let mut stdout = stdout();
-        execute!(stdout, Clear(ClearType::All))
-    }
     fn refresh_screen(&self) -> Result<(), std::io::Error> {
         if self.should_quit {
-            Self::clear_screen()?;
+            Terminal::clear_screen()?;
             print!("Goodbye.\r\n");
+        } else {
+            Self::draw_rows()?;
+            Terminal::move_cursor_to(0, 0)?;
         }
+        Ok(())
+    }
+    fn draw_rows() -> Result<(), std::io::Error> {
+        let height = Terminal::size()?.1;
+
+        for current_row in 0..height {
+            Terminal::move_cursor_to(0, current_row)?;
+            print!("~");
+
+            if current_row + 1 < height {
+                print!("\r\n");
+            }
+        }
+
         Ok(())
     }
 }
