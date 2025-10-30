@@ -10,6 +10,7 @@ pub struct Size {
     pub width: u16,
 }
 
+#[derive(Copy, Clone, Default)]
 pub struct Position {
     pub x: u16,
     pub y: u16,
@@ -22,7 +23,7 @@ impl Terminal {
     pub fn initialize() -> Result<(), std::io::Error> {
         enable_raw_mode()?;
         Self::clear_screen()?;
-        Self::move_cursor_to(Position{ x: 0, y: 0 })?;
+        Self::move_caret_to(Position::default())?;
         Self::execute()?;
         Ok(())
     }
@@ -33,7 +34,7 @@ impl Terminal {
     pub fn clear_screen() -> Result<(), std::io::Error> {
         queue!(stdout(), Clear(ClearType::All))
     }
-    pub fn move_cursor_to(pos: Position) -> Result<(), std::io::Error> {
+    pub fn move_caret_to(pos: Position) -> Result<(), std::io::Error> {
         queue!(stdout(), MoveTo(pos.x, pos.y))?;
         Ok(())
     }
@@ -44,10 +45,10 @@ impl Terminal {
     pub fn print(string: &str) -> Result<(), std::io::Error> {
         queue!(stdout(), Print(string))
     }
-    pub fn show_cursor() -> Result<(), std::io::Error> {
+    pub fn show_caret() -> Result<(), std::io::Error> {
         queue!(stdout(), Show)
     }
-    pub fn hide_cursor() -> Result<(), std::io::Error> {
+    pub fn hide_caret() -> Result<(), std::io::Error> {
         queue!(stdout(), Hide)
     }
     pub fn clear_line() -> Result<(), std::io::Error> {

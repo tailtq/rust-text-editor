@@ -1,21 +1,22 @@
 mod terminal;
-use terminal::Terminal;
-use crossterm::event::{read, Event, Event::Key, KeyCode::Char, KeyEvent, KeyModifiers};
+use std::cmp::min;
+
+use terminal::{Terminal, Size};
+use crossterm::event::{Event::{self, Key}, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read};
 
 use crate::editor::terminal::Position;
 
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+
+#[derive(Default)]
 pub struct Editor {
-    should_quit: bool
+    should_quit: bool,
+    caret_position: Position,
 }
 
 impl Editor {
-    pub const fn default() -> Self {
-        Self {
-            should_quit: false
-        }
-    }
-
     pub fn run(&mut self) {
         Terminal::initialize().unwrap();
         let repl = self.repl();
@@ -28,44 +29,61 @@ impl Editor {
         // If it's an error, it returns the error immediately. If not, it continues.
         loop {
             self.refresh_screen()?;
+            Self::draw_welcome_message()?;
             if self.should_quit {
                 let _ = Self::draw_rows();
                 break;
             }
             let event = read()?;
-            self.evaluate_event(&event);
+            self.evaluate_event(&event)?;
         }
         Ok(())
     }
-    fn evaluate_event(&mut self, event: &Event) {
+    fn evaluate_event(&mut self, event: &Event) -> Result<(), std::io::Error> {
         // This syntax is shorter compared to match with only one option
         // (using match requires catching the other cases _ => ())
         // event is an enum and the if block checks if it's Key
         if let Key(KeyEvent {
-            code, modifiers, ..
+            code, modifiers, kind: KeyEventKind::Press, ..
         }) = event {
             // print!("Code: {code},  modifiers: {modifiers}\r\n");
             // implicit dereference for code and dereference for modifiers
             match code {
-                Char('x') if *modifiers == KeyModifiers::CONTROL => {
+                KeyCode::Char('x') if *modifiers == KeyModifiers::CONTROL => {
                     self.should_quit = true;
+                },
+                KeyCode::Up |
+                KeyCode::Down |
+                KeyCode::Left |
+                KeyCode::Right |
+                KeyCode::PageUp |
+                KeyCode::Home |
+                KeyCode::PageDown |
+                KeyCode::End => {
+                    self.move_point(code)?;
                 },
                 _ => (),
             }
+            
         }
+        Ok(())
     }
     fn refresh_screen(&self) -> Result<(), std::io::Error> {
-        Terminal::hide_cursor()?;
+        Terminal::hide_caret()?;
+        Terminal::move_caret_to(Position::default())?;
 
         if self.should_quit {
             Terminal::clear_screen()?;
             Terminal::print("Goodbye.\r\n")?;
         } else {
             Self::draw_rows()?;
-            Terminal::move_cursor_to(Position{ x: 0, y: 0 })?;
+            Terminal::move_caret_to(Position{
+                x: self.caret_position.x,
+                y: self.caret_position.y,
+            })?;
         }
 
-        Terminal::show_cursor()?;
+        Terminal::show_caret()?;
         Terminal::execute()?;
         Ok(())
     }
@@ -74,13 +92,50 @@ impl Editor {
 
         for current_row in 0..height {
             Terminal::clear_line()?;
-            Terminal::print("~")?;
-
-            if current_row + 1 < height {
+            
+            if current_row == (height as f32 / 2.5) as u16 {
+                Self::draw_welcome_message()?;
+            } else {
+                Self::draw_empty_row()?;
+            }
+            if current_row.saturating_add(1) < height {
                 Terminal::print("\r\n")?;
             }
         }
 
+        Ok(())
+    }
+    fn draw_welcome_message() -> Result<(), std::io::Error> {
+        let mut welcome_message = format!("{NAME} editor -- version {VERSION}");
+        let width = Terminal::size()?.width as usize;
+        let len = welcome_message.len();
+        let padding = (width - len) / 2;
+        let spaces = " ".repeat(padding - 1);
+        welcome_message = format!("~{spaces}{welcome_message}");
+        welcome_message.truncate(width);
+        Terminal::print(&welcome_message)?;
+        Ok(())
+    }
+    fn draw_empty_row() -> Result<(), std::io::Error> {
+        Terminal::print("~")
+    }
+    fn move_point(&mut self, key_code: &KeyCode) -> Result<(), std::io::Error> {
+        let Position { mut x, mut y } = self.caret_position;
+        let Size { width, height } = Terminal::size()?;
+
+        match *key_code {
+            KeyCode::Up => y = y.saturating_sub(1),
+            KeyCode::Down => y = min(height.saturating_sub(1), y.saturating_add(1)),
+            KeyCode::Left => x = x.saturating_sub(1),
+            KeyCode::Right => x = min(width.saturating_sub(1), x.saturating_add(1)),
+            KeyCode::Home => x = 0,
+            KeyCode::PageUp => y = 0,
+            KeyCode::End => x = width.saturating_sub(1),
+            KeyCode::PageDown => y = height.saturating_sub(1),
+            _ => (),
+        }
+        self.caret_position.x = x;
+        self.caret_position.y = y;
         Ok(())
     }
 }
