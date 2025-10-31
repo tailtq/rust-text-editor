@@ -18,7 +18,9 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub fn run(&mut self) {
+    pub fn run(&mut self, filename: &str) {
+        self.view.load_file(filename);
+        
         Terminal::initialize().unwrap();
         let repl = self.repl();
         Terminal::terminate().unwrap();
