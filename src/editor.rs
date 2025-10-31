@@ -1,19 +1,20 @@
 mod terminal;
+mod view;
+mod buffer;
 use std::cmp::min;
 
 use terminal::{Terminal, Size};
+use view::View;
 use crossterm::event::{Event::{self, Key}, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read};
 
 use crate::editor::terminal::Position;
-
-const NAME: &str = env!("CARGO_PKG_NAME");
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 
 #[derive(Default)]
 pub struct Editor {
     should_quit: bool,
     caret_position: Position,
+    view: View,
 }
 
 impl Editor {
@@ -29,9 +30,9 @@ impl Editor {
         // If it's an error, it returns the error immediately. If not, it continues.
         loop {
             self.refresh_screen()?;
-            Self::draw_welcome_message()?;
+            View::draw_welcome_message()?;
             if self.should_quit {
-                let _ = Self::draw_rows();
+                let _ = self.view.render();
                 break;
             }
             let event = read()?;
@@ -68,7 +69,7 @@ impl Editor {
         }
         Ok(())
     }
-    fn refresh_screen(&self) -> Result<(), std::io::Error> {
+    fn refresh_screen(&mut self) -> Result<(), std::io::Error> {
         Terminal::hide_caret()?;
         Terminal::move_caret_to(Position::default())?;
 
@@ -76,7 +77,7 @@ impl Editor {
             Terminal::clear_screen()?;
             Terminal::print("Goodbye.\r\n")?;
         } else {
-            Self::draw_rows()?;
+            self.view.render()?;
             Terminal::move_caret_to(Position{
                 x: self.caret_position.x,
                 y: self.caret_position.y,
@@ -87,38 +88,7 @@ impl Editor {
         Terminal::execute()?;
         Ok(())
     }
-    fn draw_rows() -> Result<(), std::io::Error> {
-        let height = Terminal::size()?.height;
-
-        for current_row in 0..height {
-            Terminal::clear_line()?;
-            
-            if current_row == (height as f32 / 2.5) as u16 {
-                Self::draw_welcome_message()?;
-            } else {
-                Self::draw_empty_row()?;
-            }
-            if current_row.saturating_add(1) < height {
-                Terminal::print("\r\n")?;
-            }
-        }
-
-        Ok(())
-    }
-    fn draw_welcome_message() -> Result<(), std::io::Error> {
-        let mut welcome_message = format!("{NAME} editor -- version {VERSION}");
-        let width = Terminal::size()?.width as usize;
-        let len = welcome_message.len();
-        let padding = (width - len) / 2;
-        let spaces = " ".repeat(padding - 1);
-        welcome_message = format!("~{spaces}{welcome_message}");
-        welcome_message.truncate(width);
-        Terminal::print(&welcome_message)?;
-        Ok(())
-    }
-    fn draw_empty_row() -> Result<(), std::io::Error> {
-        Terminal::print("~")
-    }
+    
     fn move_point(&mut self, key_code: &KeyCode) -> Result<(), std::io::Error> {
         let Position { mut x, mut y } = self.caret_position;
         let Size { width, height } = Terminal::size()?;
