@@ -6,14 +6,7 @@ use editor::Editor;
 // use std::io::Read;
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let mut filename = &String::new();
-
-    if let Some(first_arg) = args.get(1) {
-        filename = first_arg;
-    }
     // Read byte from the standard input into the variable b.
     // io::stdin().bytes() is an iterator
-    let mut editor = Editor::default();
-    editor.run(filename);
+    _ = Editor::new().unwrap().run();
 }

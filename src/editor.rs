@@ -1,8 +1,8 @@
 mod terminal;
 mod view;
 mod buffer;
-use std::cmp::min;
-
+use std::{cmp::min, panic::take_hook, panic::set_hook};
+use std::io::Error;
 use terminal::{Terminal, Size};
 use view::View;
 use crossterm::event::{Event::{self, Key, Resize}, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read};
@@ -10,7 +10,6 @@ use crossterm::event::{Event::{self, Key, Resize}, KeyCode, KeyEvent, KeyEventKi
 use crate::editor::terminal::Position;
 
 
-#[derive(Default)]
 pub struct Editor {
     should_quit: bool,
     caret_position: Position,
@@ -18,16 +17,30 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub fn run(&mut self, filename: &str) {
-        self.view.load_file(filename);
+    pub fn new() -> Result<Self, Error> {
+        let current_hook = take_hook();
+        set_hook(Box::new(move |panic_info| {
+            let _ = Terminal::terminate();
+            current_hook(panic_info);
+        }));
+        Terminal::initialize()?;
+
+        let mut view = View::default();
+        let args: Vec<String> = std::env::args().collect();
+        if let Some(first_arg) = args.get(1) {
+            let filename = first_arg;
+            view.load_file(&filename);
+        }
         
-        Terminal::initialize().unwrap();
-        let repl = self.repl();
-        Terminal::terminate().unwrap();
-        repl.unwrap();
+        Ok(Self {
+            should_quit: false,
+            caret_position: Position::default(),
+            view,
+        })
     }
+
     // The function will return nothing if everything went well, and returns an error if something we couldn't recover from happened.
-    fn repl(&mut self) -> Result<(), std::io::Error> {
+    pub fn run(&mut self) -> Result<(), std::io::Error> {
         // unwraps the Result of enable_raw_mode.
         // If it's an error, it returns the error immediately. If not, it continues.
         loop {
@@ -42,6 +55,7 @@ impl Editor {
         }
         Ok(())
     }
+
     fn evaluate_event(&mut self, event: &Event) -> Result<(), std::io::Error> {
         // This syntax is shorter compared to match with only one option
         // (using match requires catching the other cases _ => ())
@@ -72,6 +86,7 @@ impl Editor {
         }
         Ok(())
     }
+
     fn refresh_screen(&mut self) -> Result<(), std::io::Error> {
         Terminal::hide_caret()?;
         Terminal::move_caret_to(Position::default())?;
