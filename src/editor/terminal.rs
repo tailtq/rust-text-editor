@@ -5,15 +5,16 @@ use crossterm::cursor::{MoveTo, Hide, Show};
 use crossterm::terminal::{ClearType, disable_raw_mode, enable_raw_mode, Clear, size};
 
 
+#[derive(Debug, Default)]
 pub struct Size {
-    pub height: u16,
-    pub width: u16,
+    pub height: usize,
+    pub width: usize,
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct Position {
-    pub x: u16,
-    pub y: u16,
+    pub row: usize,
+    pub col: usize,
 }
 
 pub struct Terminal {
@@ -35,12 +36,12 @@ impl Terminal {
         queue!(stdout(), Clear(ClearType::All))
     }
     pub fn move_caret_to(pos: Position) -> Result<(), std::io::Error> {
-        queue!(stdout(), MoveTo(pos.x, pos.y))?;
+        queue!(stdout(), MoveTo(pos.col as u16, pos.row as u16))?;
         Ok(())
     }
     pub fn size() -> Result<Size, std::io::Error> {
         let (width, height) = size()?;
-        Ok(Size{ width: width, height: height })
+        Ok(Size{ width: width as usize, height: height as usize })
     }
     pub fn print(string: &str) -> Result<(), std::io::Error> {
         queue!(stdout(), Print(string))

@@ -5,7 +5,7 @@ use std::cmp::min;
 
 use terminal::{Terminal, Size};
 use view::View;
-use crossterm::event::{Event::{self, Key}, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read};
+use crossterm::event::{Event::{self, Key, Resize}, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read};
 
 use crate::editor::terminal::Position;
 
@@ -32,7 +32,7 @@ impl Editor {
         // If it's an error, it returns the error immediately. If not, it continues.
         loop {
             self.refresh_screen()?;
-            View::draw_welcome_message()?;
+
             if self.should_quit {
                 let _ = self.view.render();
                 break;
@@ -65,9 +65,10 @@ impl Editor {
                 KeyCode::End => {
                     self.move_point(code)?;
                 },
-                _ => (),
+                _ => {},
             }
-            
+        } else if let Resize(width, height) = event {
+            self.view.resize(Size { height: (*height) as usize, width: (*width) as usize })?;
         }
         Ok(())
     }
@@ -81,8 +82,8 @@ impl Editor {
         } else {
             self.view.render()?;
             Terminal::move_caret_to(Position{
-                x: self.caret_position.x,
-                y: self.caret_position.y,
+                col: self.caret_position.col,
+                row: self.caret_position.row,
             })?;
         }
 
@@ -92,22 +93,22 @@ impl Editor {
     }
     
     fn move_point(&mut self, key_code: &KeyCode) -> Result<(), std::io::Error> {
-        let Position { mut x, mut y } = self.caret_position;
+        let Position { mut col, mut row } = self.caret_position;
         let Size { width, height } = Terminal::size()?;
 
         match *key_code {
-            KeyCode::Up => y = y.saturating_sub(1),
-            KeyCode::Down => y = min(height.saturating_sub(1), y.saturating_add(1)),
-            KeyCode::Left => x = x.saturating_sub(1),
-            KeyCode::Right => x = min(width.saturating_sub(1), x.saturating_add(1)),
-            KeyCode::Home => x = 0,
-            KeyCode::PageUp => y = 0,
-            KeyCode::End => x = width.saturating_sub(1),
-            KeyCode::PageDown => y = height.saturating_sub(1),
+            KeyCode::Up => row = row.saturating_sub(1),
+            KeyCode::Down => row = min(height.saturating_sub(1), row.saturating_add(1)),
+            KeyCode::Left => col = col.saturating_sub(1),
+            KeyCode::Right => col = min(width.saturating_sub(1), col.saturating_add(1)),
+            KeyCode::Home => col = 0,
+            KeyCode::PageUp => row = 0,
+            KeyCode::End => col = width.saturating_sub(1),
+            KeyCode::PageDown => row = height.saturating_sub(1),
             _ => (),
         }
-        self.caret_position.x = x;
-        self.caret_position.y = y;
+        self.caret_position.col = col;
+        self.caret_position.row = row;
         Ok(())
     }
 }

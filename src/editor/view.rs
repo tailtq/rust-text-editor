@@ -1,96 +1,98 @@
-use super::terminal::Terminal;
+use super::terminal::{Terminal, Size, Position};
 use super::buffer::Buffer;
-use std::fs;
 
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 
-#[derive(Default)]
 pub struct View {
-    buffer: Buffer
+    buffer: Buffer,
+    needs_redraw: bool,
+    size: Size
 }
 
-// impl Default for View {
-//     fn default() -> Self {
-//         Self {
-//             buffer: Buffer {
-//                 content: vec![
-//                     ("Hello, World!").to_string(),
-//                     ("I'm Tai from Workday!").to_string()
-//                 ]
-//             },
-//         }
-//     }
-// }
+impl Default for View {
+    fn default() -> Self {
+        Self {
+            buffer: Buffer::default(),
+            needs_redraw: true,
+            size: Terminal::size().unwrap_or_default(),
+        }
+    }
+}
 
 impl View {
-    pub fn render(&self) -> Result<(), std::io::Error> {
-        if self.buffer.is_empty() {
-            self.render_welcome_screen()?;
-        } else {
-            self.render_buffer()?;
-        }
+    pub fn resize(&mut self, to: Size) -> Result<(), std::io::Error> {
+        self.size = to;
+        self.needs_redraw = true;
+        self.render()?;
         Ok(())
     }
-    pub fn render_welcome_screen(&self) -> Result<(), std::io::Error> {
-        let height = Terminal::size()?.height;
+
+    fn render_line(at: usize, line_text: &str) -> Result<(), std::io::Error> {
+        Terminal::move_caret_to(Position { col: 0, row: at })?;
         Terminal::clear_line()?;
-
-        for current_row in 0..height {
-            Terminal::clear_line()?;
-
-            if current_row == (height as f32 / 2.5) as u16 {
-                Self::draw_welcome_message()?;
-            } else {
-                Self::draw_empty_row()?;
-            }
-            if current_row.saturating_add(1) < height {
-                Terminal::print("\r\n")?;
-            }
-        }
+        Terminal::print(line_text)?;
         Ok(())
     }
-    pub fn render_buffer(&self) -> Result<(), std::io::Error> {
-        let height = Terminal::size()?.height;
-        Terminal::clear_line()?;
 
-        for current_row in 0..height {
-            Terminal::clear_line()?;
-
-            if let Some(line) = self.buffer.content.get(current_row as usize) {
-                Terminal::print(&line)?;
-            } else {
-                Self::draw_empty_row()?;
-            }
-            if current_row.saturating_add(1) < height {
-                Terminal::print("\r\n")?;
-            }
+    pub fn render(&mut self) -> Result<(), std::io::Error> {
+        if !self.needs_redraw {
+            return Ok(());
         }
 
+        let Size { height, width } = self.size;
+        let height = height as usize;
+        let width = width as usize;
+        if height == 0 || width == 0 {
+            return Ok(());
+        }
+        // we allow this since we don't care if our welcome message is put _exactly_ in the middle.
+        // it's allowed to be a bit too far up or down
+        #[allow(clippy::integer_division)]
+        let vertical_center = height / 3;
+        
+        for current_row in 0..height {
+            if let Some(line) = self.buffer.content.get(current_row) {
+                let truncated_line = if line.len() >= width {
+                    &line[0..width]
+                } else {
+                    line
+                };
+                Self::render_line(current_row, truncated_line)?;
+            } else if current_row == vertical_center && self.buffer.is_empty() {
+                Self::render_line(current_row, &Self::build_welcome_message(width))?;
+            } else {
+                Self::render_line(current_row, "~")?;
+            }
+        }
+        self.needs_redraw = false;
         Ok(())
     }
-    pub fn draw_welcome_message() -> Result<(), std::io::Error> {
-        let mut welcome_message = format!("{NAME} editor -- version {VERSION}");
-        let width = Terminal::size()?.width as usize;
+
+    fn build_welcome_message(width: usize) -> String {
+        if width == 0 {
+            return " ".to_string();
+        }
+        let welcome_message = format!("{NAME} editor -- version {VERSION}");
         let len = welcome_message.len();
-        let padding = (width - len) / 2;
-        let spaces = " ".repeat(padding - 1);
-        welcome_message = format!("~{spaces}{welcome_message}");
-        welcome_message.truncate(width);
-        Terminal::print(&welcome_message)?;
-        Ok(())
-    }
-    pub fn draw_empty_row() -> Result<(), std::io::Error> {
-        Terminal::print("~")
-    }
-    pub fn load_file(&mut self, filename: &str) {
-        if !filename.is_empty() {
-            let lines = fs::read_to_string(filename).unwrap();
+        if width <= len {
+            return "~".to_string();
+        }
+        // we allow this since we don't care if our welcome message is put _exactly_ in the middle.
+        // it's allowed to be a bit to the left or right.
+        #[allow(clippy::integer_division)]
+        let padding = (width.saturating_sub(len).saturating_sub(1)) / 2;
 
-            for line in lines.lines() {
-                self.buffer.content.push(line.to_string());
-            }
+        let mut full_message = format!("~{}{}", " ".repeat(padding), welcome_message);
+        full_message.truncate(width);
+        full_message
+    }
+
+    pub fn load_file(&mut self, filename: &str) {
+        if let Ok(buffer) = Buffer::load(filename) {
+            self.buffer = buffer;
+            self.needs_redraw = true;
         }
     }
 }

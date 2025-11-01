@@ -1,4 +1,7 @@
-#[derive(Default, Clone)]
+use std::io::Error;
+use std::fs::read_to_string;
+
+#[derive(Default, Clone, Debug)]
 pub struct Buffer {
     pub content: Vec<String>
 }
@@ -6,5 +9,14 @@ pub struct Buffer {
 impl Buffer {
     pub fn is_empty(&self) -> bool {
         self.content.len() == 0
+    }
+
+    pub fn load(file_name: &str) -> Result<Self, Error> {
+        let contents = read_to_string(file_name)?;
+        let mut lines = Vec::new();
+        for value in contents.lines() {
+            lines.push(String::from(value));
+        }
+        Ok(Self { content: lines })
     }
 }
